@@ -23,7 +23,6 @@ except ImportError:
     cv2 = None  # type: ignore
 
 from database import init_database, insert_sample_data, get_connection
-from body_metric_module import analyse_image, BodyMetricResult
 
 # Import routers
 from routers import users, body_profile, wardrobe, recommendations, chat, preferences
@@ -55,7 +54,7 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 # ─── Register Routers ────────────────────────────────────────
 
 app.include_router(users.router)
-app.include_router(body_profile.router)
+app.include_router(body_profile.router, prefix="/api/body-profile", tags=["body-profile"])
 app.include_router(wardrobe.router)
 app.include_router(recommendations.router)
 app.include_router(chat.router)
@@ -68,31 +67,6 @@ async def startup():
     """Initialize database and insert sample data on startup."""
     init_database()
     insert_sample_data()
-
-
-# ─── Legacy Endpoint (kept for backward compatibility) ────────
-
-@app.post("/body-metrics", response_model=None)
-async def body_metrics(file: UploadFile = File(...)) -> dict:
-    """Legacy endpoint: Analyse a user-uploaded image and return body metrics."""
-    if cv2 is None:
-        raise HTTPException(status_code=500, detail="OpenCV is not installed on the server.")
-
-    image_bytes = await file.read()
-    image_np = np.frombuffer(image_bytes, dtype=np.uint8)
-    image = cv2.imdecode(image_np, cv2.IMREAD_COLOR)
-
-    if image is None:
-        raise HTTPException(status_code=400, detail="Uploaded file is not a valid image.")
-
-    try:
-        result: BodyMetricResult = analyse_image(image)
-    except ImportError as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    except RuntimeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    return result.as_dict()
 
 
 @app.get("/healthz")
@@ -168,3 +142,7 @@ async def root():
             "preferences": "/api/preferences",
         },
     }
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
