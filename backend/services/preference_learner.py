@@ -6,9 +6,10 @@ Extracts and updates user preferences from chat messages.
 
 from __future__ import annotations
 import json
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 from database import get_connection
 from services.chatbot_engine import extract_colors_from_message, extract_sentiment
+from services.nlp_constraints import detect_categories
 
 
 def learn_from_message(user_id: int, message: str, intent: str) -> Optional[Dict]:
@@ -38,6 +39,9 @@ def learn_from_message(user_id: int, message: str, intent: str) -> Optional[Dict
     preferred_colors = json.loads(pref_row["preferred_colors"] or "[]")
     disliked_colors = json.loads(pref_row["disliked_colors"] or "[]")
     preferred_styles = json.loads(pref_row["preferred_styles"] or "[]")
+    disliked_styles = json.loads(pref_row["disliked_styles"] or "[]")
+    disliked_categories = json.loads(pref_row["disliked_categories"] or "[]")
+    temporary_constraints = json.loads(pref_row["temporary_constraints"] or "{}")
     preferred_formality = pref_row["preferred_formality"]
 
     colors = extract_colors_from_message(message)
@@ -85,6 +89,8 @@ def learn_from_message(user_id: int, message: str, intent: str) -> Optional[Dict
             preferred_formality = formality_order[idx - 1]
             extracted["formality_adjusted"] = preferred_formality
             updated = True
+        temporary_constraints["target_formality"] = "Casual"
+        updated = True
 
     elif intent == "make_more_formal":
         formality_order = ["Casual", "Smart Casual", "Semi-Formal", "Formal"]
@@ -93,6 +99,8 @@ def learn_from_message(user_id: int, message: str, intent: str) -> Optional[Dict
             preferred_formality = formality_order[idx + 1]
             extracted["formality_adjusted"] = preferred_formality
             updated = True
+        temporary_constraints["target_formality"] = "Formal"
+        updated = True
 
     # Style preference learning
     style_keywords = {
@@ -108,6 +116,21 @@ def learn_from_message(user_id: int, message: str, intent: str) -> Optional[Dict
                 preferred_styles.append(style)
                 extracted["style_added"] = style
                 updated = True
+        if any(kw in msg_lower for kw in keywords) and sentiment == "negative":
+            if style not in disliked_styles:
+                disliked_styles.append(style)
+                extracted["disliked_style_added"] = style
+                updated = True
+
+    if any(x in msg_lower for x in ["without", "not", "no "]):
+        cats = detect_categories(message)
+        if cats:
+            for c in cats:
+                if c not in disliked_categories:
+                    disliked_categories.append(c)
+            temporary_constraints["exclude_categories"] = sorted(set(cats))
+            extracted["exclude_categories"] = sorted(set(cats))
+            updated = True
 
     # Save updates
     if updated:
@@ -116,14 +139,20 @@ def learn_from_message(user_id: int, message: str, intent: str) -> Optional[Dict
                 preferred_colors = ?,
                 disliked_colors = ?,
                 preferred_styles = ?,
+                disliked_styles = ?,
+                disliked_categories = ?,
                 preferred_formality = ?,
+                temporary_constraints = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE user_id = ?
         """, (
             json.dumps(preferred_colors),
             json.dumps(disliked_colors),
             json.dumps(preferred_styles),
+            json.dumps(disliked_styles),
+            json.dumps(disliked_categories),
             preferred_formality,
+            json.dumps(temporary_constraints),
             user_id,
         ))
         conn.commit()

@@ -245,11 +245,14 @@ class ApiService {
           Uri.parse('$baseUrl/api/body-profile/$userId/scan-save'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
-            'metrics': scanResult['metrics'] ?? {},
+            'metrics': {
+              'measurements': scanResult['measurements'] ?? scanResult['metrics'] ?? {},
+              'ratios': scanResult['ratios'] ?? {},
+            },
             'body_type': scanResult['body_type'] ?? 'rectangle',
             'symmetry': scanResult['symmetry'] ?? 0.0,
             'posture_angle': scanResult['posture_angle'] ?? 0.0,
-            'estimated_height_cm': estimatedHeightCm,
+            'estimated_height_cm': (scanResult['measurements']?['estimated_height_cm'] ?? estimatedHeightCm),
             'estimated_weight_kg': estimatedWeightKg,
           }),
         )

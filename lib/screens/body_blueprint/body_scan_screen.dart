@@ -6,7 +6,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:provider/provider.dart';
-import '../../config/api_config.dart';
+import '../../providers/body_metric_provider.dart';
+import '../../services/api_service.dart';
 import '../../providers/user_provider.dart';
 import '../../routing/app_router.dart';
 
@@ -75,7 +76,7 @@ class _BodyScanScreenState extends State<BodyScanScreen> {
       final userProvider = context.read<UserProvider>();
       final userId = userProvider.isLoggedIn ? userProvider.userId.toString() : 'demo';
       
-      final uri = Uri.parse('${ApiConfig.bodyProfileScan}/$userId/scan');
+      final uri = Uri.parse('${ApiService.baseUrl}/api/body-profile/$userId/scan');
       
       final request = http.MultipartRequest('POST', uri);
       
@@ -100,7 +101,10 @@ class _BodyScanScreenState extends State<BodyScanScreen> {
       final response = 
         await http.Response.fromStream(streamed);
 
-      final data = jsonDecode(response.body);
+      final dynamic decoded = jsonDecode(response.body);
+      final data = decoded is Map<String, dynamic>
+          ? decoded
+          : <String, dynamic>{"message": "Invalid server response"};
 
       if (response.statusCode == 200 && 
           data['success'] == true) {
@@ -120,8 +124,14 @@ class _BodyScanScreenState extends State<BodyScanScreen> {
         _isAnalyzing = false;
         _errorMessage = 
           'Cannot connect to server.\n'
-          'Make sure to update IP address in api_config.dart for physical devices.\n'
+          'Open Settings and set a valid backend base URL.\n'
+          'Example: https://<your-tunnel>.trycloudflare.com\n'
           'Ensure backend is running on port 8000.';
+      });
+    } on FormatException {
+      setState(() {
+        _isAnalyzing = false;
+        _errorMessage = 'Server returned invalid response. Check backend URL in Settings.';
       });
     } catch (e) {
       setState(() {
@@ -188,8 +198,12 @@ class _BodyScanScreenState extends State<BodyScanScreen> {
     final description = _results!['body_description'] ?? '';
     final tips = List<String>.from(
       _results!['styling_tips'] ?? []);
-    final confidence = _results!['confidence'] ?? 0;
-    final ratio = _results!['shoulder_hip_ratio'] ?? 0;
+    final confidence = _results!['confidence'] ??
+        _results!['confidence_percent'] ??
+        0;
+    final ratio = _results!['shoulder_hip_ratio'] ??
+        (_results!['ratios']?['shoulder_to_hip']) ??
+        0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -344,14 +358,39 @@ class _BodyScanScreenState extends State<BodyScanScreen> {
 
   Future<void> _saveToProfile() async {
     if (_results == null) return;
-    // Save results to SharedPreferences or your local DB
+
+    final userProvider = context.read<UserProvider>();
+    final userId = userProvider.userId;
+    final estHeight = ((_results!['measurements']?['estimated_height_cm']) is num)
+        ? (_results!['measurements']['estimated_height_cm'] as num).toDouble()
+        : 170.0;
+
+    final ok = await context.read<BodyMetricProvider>().saveProfileFromScan(
+      userId: userId,
+      scanResult: _results!,
+      targetHeightCm: estHeight,
+    );
+
+    if (!mounted) return;
+
+    if (ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Body profile saved to Profile page'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      Navigator.pop(context, _results);
+      return;
+    }
+
+    final err = context.read<BodyMetricProvider>().error ?? 'Failed to save body profile.';
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Body profile saved! '),
-        backgroundColor: Colors.green,
+      SnackBar(
+        content: Text(err),
+        backgroundColor: Colors.red,
       ),
     );
-    Navigator.pop(context, _results);
   }
 
   @override

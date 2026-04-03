@@ -20,6 +20,18 @@ class _OutfitRecommendationScreenState
     extends State<OutfitRecommendationScreen> {
   int _currentOutfitIndex = 0;
 
+  double? _readScore(Map<String, dynamic> scores, List<String> keys) {
+    for (final key in keys) {
+      final v = scores[key];
+      if (v is num) return v.toDouble();
+      if (v is String) {
+        final parsed = double.tryParse(v);
+        if (parsed != null) return parsed;
+      }
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final recProvider = context.watch<RecommendationProvider>();
@@ -105,19 +117,40 @@ class _OutfitRecommendationScreenState
                 children: [
                   _ScoreBadge(
                     label: 'Suitability',
-                    value: '${outfit.scores["appropriateness"]?.toStringAsFixed(0) ?? "—"}%',
+                    value: (() {
+                      final s = _readScore(outfit.scores, const [
+                        'suitability_score',
+                        'appropriateness',
+                        'keyword_relevance',
+                      ]);
+                      return s == null ? '—' : '${s.toStringAsFixed(0)}%';
+                    })(),
                     color: AppColors.successSoft,
                   ),
                   const SizedBox(width: AppSpacing.sm),
                   _ScoreBadge(
                     label: 'Confidence',
-                    value: '${outfit.scores["confidence"]?.toStringAsFixed(0) ?? "—"}%',
+                    value: (() {
+                      final s = _readScore(outfit.scores, const [
+                        'confidence',
+                        'confidence_score',
+                        'preference_alignment',
+                      ]);
+                      return s == null ? '—' : '${s.toStringAsFixed(0)}%';
+                    })(),
                     color: AppColors.accentLavender.withOpacity(0.3),
                   ),
                   const SizedBox(width: AppSpacing.sm),
                   _ScoreBadge(
                     label: 'Comfort',
-                    value: '${outfit.scores["comfort"]?.toStringAsFixed(0) ?? "—"}%',
+                    value: (() {
+                      final s = _readScore(outfit.scores, const [
+                        'comfort',
+                        'formality_match',
+                        'color_compatibility',
+                      ]);
+                      return s == null ? '—' : '${s.toStringAsFixed(0)}%';
+                    })(),
                     color: AppColors.warningSoft,
                   ),
                 ],

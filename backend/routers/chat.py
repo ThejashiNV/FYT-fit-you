@@ -5,9 +5,11 @@ Chat API endpoints with explainable AI.
 import json
 from fastapi import APIRouter, HTTPException
 from database import get_connection
-from models.schemas import ChatMessage, ChatResponse
+from models.schemas import ChatMessage, ChatResponse, OutfitSuggestion, OutfitItem
 from services.chatbot_engine import classify_intent, generate_response
 from services.preference_learner import learn_from_message
+from services.recommendation_engine import generate_recommendations
+from services.nlp_constraints import parse_chat_constraints
 
 router = APIRouter(prefix="/api/chat", tags=["Chat"])
 
@@ -45,6 +47,52 @@ async def send_message(user_id: int, chat: ChatMessage):
 
     # Learn preferences from message
     extracted = learn_from_message(user_id, chat.message, intent)
+    updated_recommendation = None
+
+    # If context has recommendation query, rerank/regenerate based on this chat message.
+    ctx = chat.context or {}
+    if isinstance(ctx, dict) and ctx.get("occasion"):
+        wardrobe_rows = cursor.execute(
+            "SELECT * FROM wardrobe_items WHERE user_id = ? AND COALESCE(active_flag,1)=1",
+            (user_id,),
+        ).fetchall()
+        wardrobe = [dict(r) for r in wardrobe_rows]
+        pref_row = cursor.execute(
+            "SELECT * FROM user_preferences WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()
+        prefs = {}
+        if pref_row:
+            prefs = {
+                "preferred_colors": json.loads(pref_row["preferred_colors"] or "[]"),
+                "disliked_colors": json.loads(pref_row["disliked_colors"] or "[]"),
+                "preferred_styles": json.loads(pref_row["preferred_styles"] or "[]"),
+                "disliked_styles": json.loads(pref_row["disliked_styles"] or "[]"),
+                "disliked_categories": json.loads(pref_row["disliked_categories"] or "[]"),
+                "preferred_formality": pref_row["preferred_formality"],
+            }
+
+        shown_signatures = set(ctx.get("shown_signatures", []))
+        parsed = parse_chat_constraints(chat.message)
+        results, _ = generate_recommendations(
+            wardrobe=wardrobe,
+            occasion=str(ctx.get("occasion")),
+            mood=ctx.get("mood"),
+            climate=ctx.get("climate"),
+            preferences=prefs,
+            top_n=1,
+            additional_notes=ctx.get("additional_notes"),
+            chat_message=chat.message,
+            shown_signatures=shown_signatures if parsed.get("request_alternative") else set(),
+        )
+        if results:
+            r = results[0]
+            updated_recommendation = OutfitSuggestion(
+                rank=r["rank"],
+                items=[OutfitItem(**i) for i in r["items"]],
+                scores=r["scores"],
+                explanation=r["explanation"],
+            )
 
     # Save chat logs
     cursor.execute("""
@@ -66,6 +114,7 @@ async def send_message(user_id: int, chat: ChatMessage):
         response=response_text,
         intent=intent,
         extracted_preferences=extracted,
+        updated_recommendation=updated_recommendation,
         suggestions=suggestion_chips,
     )
 

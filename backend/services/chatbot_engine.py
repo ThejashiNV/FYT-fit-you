@@ -52,6 +52,12 @@ def classify_intent(message: str) -> str:
     if any(w in msg for w in ["alternative", "another", "different", "other", "else", "change", "swap"]):
         return "try_alternative"
 
+    if any(w in msg for w in ["without", "not this", "exclude", "no dress", "without skirt", "without skirts"]):
+        return "refine_constraints"
+
+    if any(w in msg for w in ["show me", "something in", "in black", "in blue", "semi formal", "semi-formal"]):
+        return "refine_constraints"
+
     if any(w in msg for w in ["what should", "suggest", "recommend", "advice", "tip", "style"]):
         return "general_style_qa"
 
@@ -192,6 +198,16 @@ def generate_response(
             ],
         )
         suggestions = ["Why this outfit?", "Make it casual", "Make it formal"]
+
+    elif intent == "refine_constraints":
+        response = _pick(
+            msg,
+            [
+                "Understood. I will apply these constraints and regenerate the next best matching outfits.",
+                "Got it. I will re-rank your wardrobe combinations with your updated requirements.",
+            ],
+        )
+        suggestions = ["Show another outfit", "Make it casual", "In black"]
 
     else:
         body_tip = ""

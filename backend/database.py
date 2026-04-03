@@ -67,10 +67,16 @@ def init_database():
         name TEXT,
         category TEXT NOT NULL,
         color TEXT NOT NULL,
+        pattern TEXT,
         fabric TEXT,
+        fit_type TEXT,
         formality TEXT NOT NULL,
+        style_tags TEXT DEFAULT '[]',
+        occasion_tags TEXT DEFAULT '[]',
+        active_flag INTEGER DEFAULT 1,
         image_path TEXT,
         usage_count INTEGER DEFAULT 0,
+        last_used TIMESTAMP,
         last_worn_at TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -83,9 +89,12 @@ def init_database():
         preferred_colors TEXT DEFAULT '[]',
         disliked_colors TEXT DEFAULT '[]',
         preferred_styles TEXT DEFAULT '[]',
+        disliked_styles TEXT DEFAULT '[]',
+        disliked_categories TEXT DEFAULT '[]',
         preferred_formality TEXT DEFAULT 'Smart Casual',
         comfort_priority REAL DEFAULT 0.5,
         confidence_priority REAL DEFAULT 0.5,
+        temporary_constraints TEXT DEFAULT '{}',
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
@@ -105,6 +114,31 @@ def init_database():
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
+    -- Recommendation sessions for next-best queue flow
+    CREATE TABLE IF NOT EXISTS recommendation_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        occasion_input TEXT NOT NULL,
+        mood TEXT,
+        climate TEXT,
+        base_constraints TEXT DEFAULT '{}',
+        shown_signatures TEXT DEFAULT '[]',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    -- Feedback loop for lightweight ML ranking updates
+    CREATE TABLE IF NOT EXISTS recommendation_feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        recommendation_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        label TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (recommendation_id) REFERENCES recommendations(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
     -- Chat logs
     CREATE TABLE IF NOT EXISTS chat_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -117,6 +151,23 @@ def init_database():
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
     """)
+
+    def ensure_column(table: str, col_def: str) -> None:
+        col_name = col_def.split()[0]
+        cols = [r[1] for r in cursor.execute(f"PRAGMA table_info({table})").fetchall()]
+        if col_name not in cols:
+            cursor.execute(f"ALTER TABLE {table} ADD COLUMN {col_def}")
+
+    # migration-safe additions for existing DB files
+    ensure_column("wardrobe_items", "pattern TEXT")
+    ensure_column("wardrobe_items", "fit_type TEXT")
+    ensure_column("wardrobe_items", "style_tags TEXT DEFAULT '[]'")
+    ensure_column("wardrobe_items", "occasion_tags TEXT DEFAULT '[]'")
+    ensure_column("wardrobe_items", "active_flag INTEGER DEFAULT 1")
+    ensure_column("wardrobe_items", "last_used TIMESTAMP")
+    ensure_column("user_preferences", "disliked_styles TEXT DEFAULT '[]'")
+    ensure_column("user_preferences", "disliked_categories TEXT DEFAULT '[]'")
+    ensure_column("user_preferences", "temporary_constraints TEXT DEFAULT '{}'")
 
     conn.commit()
     conn.close()
@@ -154,22 +205,24 @@ def insert_sample_data():
 
     # Sample wardrobe items
     wardrobe_data = [
-        (user_id, 'White Oxford Shirt', 'Top', 'White', 'Cotton', 'Smart Casual', None),
-        (user_id, 'Navy Chinos', 'Bottom', 'Navy', 'Cotton', 'Smart Casual', None),
-        (user_id, 'Black Blazer', 'Outerwear', 'Black', 'Wool', 'Formal', None),
-        (user_id, 'Grey T-Shirt', 'Top', 'Grey', 'Cotton', 'Casual', None),
-        (user_id, 'Blue Jeans', 'Bottom', 'Blue', 'Denim', 'Casual', None),
-        (user_id, 'Beige Kurta', 'Top', 'Beige', 'Linen', 'Semi-Formal', None),
-        (user_id, 'Cream Trousers', 'Bottom', 'Cream', 'Cotton', 'Semi-Formal', None),
-        (user_id, 'Black Formal Shirt', 'Top', 'Black', 'Cotton', 'Formal', None),
-        (user_id, 'Dark Grey Pants', 'Bottom', 'Dark Grey', 'Polyester', 'Formal', None),
-        (user_id, 'Maroon Polo', 'Top', 'Maroon', 'Cotton', 'Casual', None),
-        (user_id, 'Khaki Shorts', 'Bottom', 'Khaki', 'Cotton', 'Casual', None),
-        (user_id, 'Light Blue Shirt', 'Top', 'Light Blue', 'Linen', 'Smart Casual', None),
+        (user_id, 'White Oxford Shirt', 'Top', 'White', 'Solid', 'Cotton', 'Regular', 'Smart Casual', '["office","formal","meeting"]', '["classic","minimal"]', 1, None),
+        (user_id, 'Navy Chinos', 'Bottom', 'Navy', 'Solid', 'Cotton', 'Slim', 'Smart Casual', '["office","casual"]', '["classic"]', 1, None),
+        (user_id, 'Black Blazer', 'Outerwear', 'Black', 'Solid', 'Wool', 'Tailored', 'Formal', '["office","interview","formal"]', '["formal","sharp"]', 1, None),
+        (user_id, 'Grey T-Shirt', 'Top', 'Grey', 'Solid', 'Cotton', 'Regular', 'Casual', '["casual","outing"]', '["casual","minimal"]', 1, None),
+        (user_id, 'Blue Jeans', 'Bottom', 'Blue', 'Solid', 'Denim', 'Regular', 'Casual', '["casual","outing"]', '["casual"]', 1, None),
+        (user_id, 'Beige Kurta', 'Top', 'Beige', 'Solid', 'Linen', 'Regular', 'Semi-Formal', '["festival","family","semi-formal"]', '["ethnic","classic"]', 1, None),
+        (user_id, 'Cream Trousers', 'Bottom', 'Cream', 'Solid', 'Cotton', 'Regular', 'Semi-Formal', '["semi-formal","office"]', '["classic"]', 1, None),
+        (user_id, 'Black Formal Shirt', 'Top', 'Black', 'Solid', 'Cotton', 'Slim', 'Formal', '["formal","dinner","office"]', '["formal"]', 1, None),
+        (user_id, 'Dark Grey Pants', 'Bottom', 'Dark Grey', 'Solid', 'Polyester', 'Tailored', 'Formal', '["formal","office"]', '["formal"]', 1, None),
+        (user_id, 'Maroon Polo', 'Top', 'Maroon', 'Solid', 'Cotton', 'Regular', 'Casual', '["casual","party"]', '["casual"]', 1, None),
+        (user_id, 'Khaki Shorts', 'Bottom', 'Khaki', 'Solid', 'Cotton', 'Regular', 'Casual', '["casual","outing"]', '["casual"]', 1, None),
+        (user_id, 'Light Blue Shirt', 'Top', 'Light Blue', 'Solid', 'Linen', 'Regular', 'Smart Casual', '["office","meeting"]', '["classic"]', 1, None),
     ]
     cursor.executemany("""
-        INSERT INTO wardrobe_items (user_id, name, category, color, fabric, formality, image_path)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO wardrobe_items (
+            user_id, name, category, color, pattern, fabric, fit_type, formality,
+            occasion_tags, style_tags, active_flag, image_path
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, wardrobe_data)
 
     # Sample preferences

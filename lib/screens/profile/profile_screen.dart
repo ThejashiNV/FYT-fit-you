@@ -106,6 +106,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const SizedBox(height: 4),
                   Text(bodyProfile.proportionSummary,
                       style: AppTypography.label(context)),
+                  const SizedBox(height: 4),
+                  Text(
+                    'H ${bodyProfile.heightCm.toStringAsFixed(1)} cm • '
+                    'Shoulder ${bodyProfile.shoulderCm.toStringAsFixed(1)} cm • '
+                    'Waist ${bodyProfile.waistCm.toStringAsFixed(1)} cm • '
+                    'Hip ${bodyProfile.hipCm.toStringAsFixed(1)} cm',
+                    style: AppTypography.label(context),
+                  ),
                 ],
                 const SizedBox(height: AppSpacing.lg),
                 Text('Wardrobe Efficiency',

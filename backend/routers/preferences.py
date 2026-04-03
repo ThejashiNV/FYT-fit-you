@@ -27,9 +27,12 @@ async def get_preferences(user_id: int):
         preferred_colors=json.loads(row["preferred_colors"] or "[]"),
         disliked_colors=json.loads(row["disliked_colors"] or "[]"),
         preferred_styles=json.loads(row["preferred_styles"] or "[]"),
+        disliked_styles=json.loads(row["disliked_styles"] or "[]"),
+        disliked_categories=json.loads(row["disliked_categories"] or "[]"),
         preferred_formality=row["preferred_formality"],
         comfort_priority=row["comfort_priority"],
         confidence_priority=row["confidence_priority"],
+        temporary_constraints=json.loads(row["temporary_constraints"] or "{}"),
     )
 
 
@@ -58,12 +61,18 @@ async def update_preferences(user_id: int, update: UserPreferenceUpdate):
         updates["disliked_colors"] = json.dumps(update.disliked_colors)
     if update.preferred_styles is not None:
         updates["preferred_styles"] = json.dumps(update.preferred_styles)
+    if update.disliked_styles is not None:
+        updates["disliked_styles"] = json.dumps(update.disliked_styles)
+    if update.disliked_categories is not None:
+        updates["disliked_categories"] = json.dumps(update.disliked_categories)
     if update.preferred_formality is not None:
         updates["preferred_formality"] = update.preferred_formality
     if update.comfort_priority is not None:
         updates["comfort_priority"] = update.comfort_priority
     if update.confidence_priority is not None:
         updates["confidence_priority"] = update.confidence_priority
+    if update.temporary_constraints is not None:
+        updates["temporary_constraints"] = json.dumps(update.temporary_constraints)
 
     if updates:
         updates["updated_at"] = "CURRENT_TIMESTAMP"
@@ -93,7 +102,10 @@ async def update_preferences(user_id: int, update: UserPreferenceUpdate):
         preferred_colors=json.loads(row["preferred_colors"] or "[]"),
         disliked_colors=json.loads(row["disliked_colors"] or "[]"),
         preferred_styles=json.loads(row["preferred_styles"] or "[]"),
+        disliked_styles=json.loads(row["disliked_styles"] or "[]"),
+        disliked_categories=json.loads(row["disliked_categories"] or "[]"),
         preferred_formality=row["preferred_formality"],
         comfort_priority=row["comfort_priority"],
         confidence_priority=row["confidence_priority"],
+        temporary_constraints=json.loads(row["temporary_constraints"] or "{}"),
     )

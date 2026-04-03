@@ -85,8 +85,13 @@ class WardrobeItemCreate(BaseModel):
     name: Optional[str] = None
     category: str  # Top, Bottom, Dress, Outerwear, Footwear, Accessory
     color: str
+    pattern: Optional[str] = "Solid"
     fabric: Optional[str] = None
+    fit_type: Optional[str] = "Regular"
     formality: str  # Casual, Smart Casual, Semi-Formal, Formal
+    style_tags: Optional[List[str]] = None
+    occasion_tags: Optional[List[str]] = None
+    active_flag: Optional[bool] = True
 
 
 class WardrobeItemResponse(BaseModel):
@@ -95,10 +100,16 @@ class WardrobeItemResponse(BaseModel):
     name: Optional[str]
     category: str
     color: str
+    pattern: Optional[str] = None
     fabric: Optional[str]
+    fit_type: Optional[str] = None
     formality: str
+    style_tags: List[str] = []
+    occasion_tags: List[str] = []
+    active_flag: bool = True
     image_path: Optional[str]
     usage_count: int = 0
+    last_used: Optional[str] = None
     last_worn_at: Optional[str] = None
     created_at: Optional[str] = None
 
@@ -117,6 +128,9 @@ class RecommendationRequest(BaseModel):
     mood: Optional[str] = "Confident"
     climate: Optional[str] = "Warm"
     additional_notes: Optional[str] = None
+    top_n: int = Field(3, ge=1, le=10)
+    session_id: Optional[int] = None
+    chat_message: Optional[str] = None
 
 
 class OutfitItem(BaseModel):
@@ -140,6 +154,8 @@ class RecommendationResponse(BaseModel):
     climate: Optional[str]
     outfits: List[OutfitSuggestion]
     body_type: Optional[str] = None
+    session_id: Optional[int] = None
+    applied_constraints: Optional[dict] = None
 
 
 class SavedRecommendation(BaseModel):
@@ -150,6 +166,10 @@ class SavedRecommendation(BaseModel):
     explanation: Optional[str]
     saved: bool
     created_at: Optional[str]
+
+
+class RecommendationFeedback(BaseModel):
+    label: str  # like/dislike/skip/wore
 
 
 # ─── Chat Schemas ──────────────────────────────────────────────
@@ -174,15 +194,21 @@ class UserPreferenceResponse(BaseModel):
     preferred_colors: List[str] = []
     disliked_colors: List[str] = []
     preferred_styles: List[str] = []
+    disliked_styles: List[str] = []
+    disliked_categories: List[str] = []
     preferred_formality: str = "Smart Casual"
     comfort_priority: float = 0.5
     confidence_priority: float = 0.5
+    temporary_constraints: dict = {}
 
 
 class UserPreferenceUpdate(BaseModel):
     preferred_colors: Optional[List[str]] = None
     disliked_colors: Optional[List[str]] = None
     preferred_styles: Optional[List[str]] = None
+    disliked_styles: Optional[List[str]] = None
+    disliked_categories: Optional[List[str]] = None
     preferred_formality: Optional[str] = None
     comfort_priority: Optional[float] = None
     confidence_priority: Optional[float] = None
+    temporary_constraints: Optional[dict] = None
